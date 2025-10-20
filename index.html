@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whack‑a‑Mole</title>
+  <style>
+    :root{
+      --bg:#0f1220;--panel:#151935;--accent:#7c5cff;--accent-2:#31e6a1;--text:#e9ecff;--muted:#9aa3c7;
+      --danger:#ff5c88;--ok:#31e6a1;--shadow:0 10px 30px rgba(0,0,0,.35)
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:radial-gradient(1200px 800px at 20% -10%, #1a2050 0%, #0f1220 60%), var(--bg);
+      color:var(--text);font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+      display:grid;place-items:center;padding:24px
+    }
+    .game{width:min(900px, 92vw);}
+
+    .topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .brand{display:flex;gap:10px;align-items:center}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+    h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.4px}
+
+    .hud{display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:16px}
+    .card{background:linear-gradient(180deg, #1b2048 0%, #121630 100%);border:1px solid #1f2555;border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
+    .card h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:0 0 6px}
+    .value{font-size:28px;font-weight:800}
+    .value small{font-size:12px;color:var(--muted);font-weight:600;margin-left:6px}
+
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{appearance:none;border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .primary{background:linear-gradient(180deg, #8666ff, #6a4bff);color:white;box-shadow:0 10px 22px rgba(108,82,255,.35)}
+    .ghost{background:transparent;border:1px solid #2b316f;color:var(--text)}
+    .muted{color:var(--muted)}
+
+    .playfield{background:linear-gradient(180deg, #151a3a 0%, #121632 100%);border:1px solid #20265a;border-radius:22px;box-shadow:var(--shadow);padding:18px}
+    .grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px}
+
+    .hole{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;isolation:isolate;border:1px solid #26306b;background:
+      radial-gradient(120px 100px at 50% 82%, #0b0e22 60%, #090c1c 100%),
+      linear-gradient(180deg, #0f1536 0%, #13183a 100%);
+      box-shadow:inset 0 12px 24px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.25);
+    }
+    .hole button{all:unset;position:absolute;inset:0;cursor:pointer;z-index:3}
+    .ring{position:absolute;inset:auto 10% 14%;height:24%;border-radius:50%;background:radial-gradient(80% 70% at 50% 40%, #0d1128 0%, #060814 70%);z-index:1;filter:blur(.3px)}
+
+    /* Mole */
+    .mole{position:absolute;left:50%;bottom:-60%;translate:-50% 0;width:64%;aspect-ratio:1;border-radius:50% 50% 44% 44% / 52% 52% 48% 48%; background:radial-gradient(90% 90% at 45% 30%, #f9cc7a 0%, #c98a2c 65%, #815412 100%); border:2px solid rgba(0,0,0,.25); box-shadow:0 10px 14px rgba(0,0,0,.35); transition:transform .12s ease, bottom .22s cubic-bezier(.2,.8,.2,1); z-index:2; pointer-events:none;}
+    .mole::before, .mole::after{content:"";position:absolute;border-radius:50%}
+    .mole::before{ /* eyes */
+      width:13%;height:13%;left:28%;top:36%;box-shadow:140% 0 0 0 #111, 200% 10% 0 2px rgba(255,255,255,.2);background:#111
+    }
+    .mole::after{ /* nose */
+      width:18%;height:12%;left:41%;top:54%;background:radial-gradient(60% 80% at 40% 40%, #ff8aa1 0%, #e15274 80%);border:1px solid rgba(0,0,0,.15)
+    }
+    .mole.up{bottom:12%}
+    .hit{animation:pop .25s ease}
+    @keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+
+    .status{margin-top:14px;text-align:center;color:var(--muted)}
+    .status strong{color:var(--text)}
+    .status .win{color:var(--ok)}
+    .status .lose{color:var(--danger)}
+
+    .footer{margin-top:12px;text-align:center;color:var(--muted);font-size:12px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  </style>
+</head>
+<body>
+  <main class="game" aria-labelledby="title">
+    <div class="topbar">
+      <div class="brand"><span class="dot" aria-hidden="true"></span><h1 id="title">Whack‑a‑Mole</h1></div>
+      <div class="controls">
+        <button id="startBtn" class="primary">Start</button>
+        <button id="resetBtn" class="ghost" aria-describedby="resetTip">Reset</button>
+        <span id="resetTip" class="sr-only">Reset puts score and time back to defaults.</span>
+      </div>
+    </div>
+
+    <section class="hud">
+      <div class="card"><h2>Score</h2><div class="value"><span id="score">0</span> <small>/ <span id="target">20</span></small></div></div>
+      <div class="card"><h2>Time Left</h2><div class="value"><span id="time">30</span> <small>s</small></div></div>
+      <div class="card"><h2>Streak</h2><div class="value"><span id="streak">0</span></div></div>
+      <div class="card"><h2>Difficulty</h2><div class="value"><span id="diff">1</span> <small>lvl</small></div></div>
+    </section>
+
+    <section class="playfield" aria-label="Playfield">
+      <div class="grid" id="grid" role="grid" aria-label="Holes">
+        <!-- 3x3 holes -->
+        <!-- holes are buttons for accessibility & touch -->
+      </div>
+      <div class="status" aria-live="polite" id="status"></div>
+    </section>
+
+    <p class="footer">Tip: you can tap on mobile. Faster hits increase your streak and make the game harder!</p>
+  </main>
+
+  <script>
+  (function(){
+    // ====== CONFIG ======
+    const GRID_SIZE = 9;                 // 3x3
+    const TARGET_SCORE = 20;             // win condition
+    const START_TIME = 30;               // seconds
+    const BASE_SPAWN_MS = 900;           // how often a mole appears (lower is harder)
+    const BASE_VISIBLE_MS = 800;         // how long mole stays up (lower is harder)
+    const MIN_SPAWN_MS = 380;
+    const MIN_VISIBLE_MS = 260;
+
+    // difficulty scaling: every X points, speed up
+    const POINTS_PER_LEVEL = 5;
+    const SPAWN_STEP = 80;               // ms reduced each level
+    const VISIBLE_STEP = 50;             // ms reduced each level
+
+    // ====== STATE ======
+    let score = 0;
+    let timeLeft = START_TIME;
+    let activeHoleId = null;
+    let spawnIntervalMs = BASE_SPAWN_MS;
+    let moleVisibleMs = BASE_VISIBLE_MS;
+    let isRunning = false;
+    let streak = 0;        // consecutive hits
+    let level = 1;
+
+    // timers
+    let countdownId = null;
+    let spawnId = null;
+    let hideTimeoutId = null;
+
+    // ====== DOM ======
+    const grid = document.getElementById('grid');
+    const scoreEl = document.getElementById('score');
+    const targetEl = document.getElementById('target');
+    const timeEl = document.getElementById('time');
+    const streakEl = document.getElementById('streak');
+    const diffEl = document.getElementById('diff');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const statusEl = document.getElementById('status');
+
+    targetEl.textContent = TARGET_SCORE;
+
+    // build grid
+    const holes = [];
+    for(let i=0;i<GRID_SIZE;i++){
+      const hole = document.createElement('div');
+      hole.className = 'hole';
+      hole.setAttribute('role','gridcell');
+      hole.setAttribute('aria-label',`Hole ${i+1}`);
+
+      const btn = document.createElement('button');
+      btn.dataset.id = i;
+      btn.title = 'Whack!';
+
+      const mole = document.createElement('div');
+      mole.className = 'mole';
+      mole.setAttribute('aria-hidden','true');
+
+      const ring = document.createElement('div');
+      ring.className = 'ring';
+
+      hole.appendChild(btn);
+      hole.appendChild(ring);
+      hole.appendChild(mole);
+      grid.appendChild(hole);
+      holes.push({hole, btn, mole});
+    }
+
+    // ========= GAME CONTROL =========
+    function startGame(){
+      if(isRunning) return; // prevent double-start
+      isRunning = true;
+      statusEl.textContent = '';
+      startBtn.disabled = true;
+      resetBtn.disabled = false;
+      if(timeLeft<=0){
+        // if we hit Start after a finished round, fully reset time
+        timeLeft = START_TIME;
+      }
+      updateHUD();
+      beginCountdown();
+      beginSpawning();
+    }
+
+    function resetGame(){
+      stopLoops();
+      score = 0; timeLeft = START_TIME; activeHoleId = null; isRunning = false; streak = 0; level = 1;
+      spawnIntervalMs = BASE_SPAWN_MS; moleVisibleMs = BASE_VISIBLE_MS;
+      holes.forEach(h=>h.mole.classList.remove('up','hit'));
+      updateHUD();
+      statusEl.textContent = 'Reset. Press Start when ready.';
+      startBtn.disabled = false;
+    }
+
+    function stopLoops(){
+      isRunning = false;
+      clearInterval(countdownId); countdownId = null;
+      clearInterval(spawnId); spawnId = null;
+      clearTimeout(hideTimeoutId); hideTimeoutId = null;
+    }
+
+    function beginCountdown(){
+      countdownId = setInterval(()=>{
+        if(!isRunning) return;
+        timeLeft--; updateHUD();
+        if(timeLeft<=0){
+          timeLeft = 0; updateHUD();
+          endRound();
+        }
+      }, 1000);
+    }
+
+    function beginSpawning(){
+      // spawn immediately, then interval
+      spawnOnce();
+      spawnId = setInterval(spawnOnce, spawnIntervalMs);
+    }
+
+    function spawnOnce(){
+      if(!isRunning) return;
+      // clear existing mole
+      if(activeHoleId !== null){
+        holes[activeHoleId].mole.classList.remove('up');
+      }
+      // choose new hole
+      const next = randomHoleExcept(activeHoleId);
+      activeHoleId = next;
+      const mole = holes[next].mole;
+      mole.classList.add('up');
+
+      // schedule hide if not clicked
+      clearTimeout(hideTimeoutId);
+      hideTimeoutId = setTimeout(()=>{
+        mole.classList.remove('up');
+        activeHoleId = null;
+        // breaking streak on miss
+        streak = 0; streakEl.textContent = streak;
+      }, Math.max(120, moleVisibleMs));
+
+      // adjust spawning timer if difficulty changed
+      refreshSpawnIntervalIfNeeded();
+    }
+
+    function refreshSpawnIntervalIfNeeded(){
+      // ensure the interval reflects the latest spawnIntervalMs
+      if(!spawnId) return;
+      clearInterval(spawnId);
+      spawnId = setInterval(spawnOnce, Math.max(120, spawnIntervalMs));
+    }
+
+    function randomHoleExcept(except){
+      let idx;
+      do { idx = Math.floor(Math.random()*GRID_SIZE); } while(idx === except);
+      return idx;
+    }
+
+    function handleHit(id){
+      if(!isRunning) return;
+      if(activeHoleId === null) return;
+      if(id !== activeHoleId) return; // clicked wrong hole
+
+      // score
+      score++; streak++;
+      const mole = holes[id].mole;
+      mole.classList.add('hit');
+      setTimeout(()=>mole.classList.remove('hit'), 180);
+
+      // hide mole immediately
+      mole.classList.remove('up');
+      activeHoleId = null;
+      clearTimeout(hideTimeoutId);
+
+      // difficulty scaling
+      if(score % POINTS_PER_LEVEL === 0){
+        level++;
+        spawnIntervalMs = Math.max(MIN_SPAWN_MS, spawnIntervalMs - SPAWN_STEP);
+        moleVisibleMs  = Math.max(MIN_VISIBLE_MS, moleVisibleMs - VISIBLE_STEP);
+      }
+
+      updateHUD();
+      if(score >= TARGET_SCORE){
+        endRound(true);
+      }
+    }
+
+    function endRound(forceWin=false){
+      stopLoops();
+      startBtn.disabled = false;
+      const didWin = forceWin || score >= TARGET_SCORE;
+      statusEl.innerHTML = didWin
+        ? `<strong class="win">You win!</strong> Reached ${score} before time ran out.`
+        : `<strong class="lose">Time!</strong> You scored ${score}/${TARGET_SCORE}. Try again.`;
+    }
+
+    function updateHUD(){
+      scoreEl.textContent = score;
+      timeEl.textContent = timeLeft;
+      streakEl.textContent = streak;
+      diffEl.textContent = level;
+    }
+
+    // wire clicks (mouse & touch)
+    holes.forEach(({btn}, i)=>{
+      btn.addEventListener('click', ()=>handleHit(i));
+      btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); handleHit(i); }, {passive:false});
+    });
+
+    startBtn.addEventListener('click', startGame);
+    resetBtn.addEventListener('click', resetGame);
+
+    // layout tweaks responsive
+    const mq = matchMedia('(max-width: 560px)');
+    function applyLayout(){
+      if(mq.matches){
+        grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      } else {
+        grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      }
+    }
+    mq.addEventListener('change', applyLayout); applyLayout();
+
+    // initial status
+    statusEl.textContent = 'Press Start to play. Whack the moles!';
+    updateHUD();
+  })();
+  </script>
+</body>
+</html>
